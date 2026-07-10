@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muse 2 — Web Signal Monitor</title>
+<style>
+  :root {
+    --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --font-serif: Georgia, "Times New Roman", Times, serif;
+  }
+  :root, :root[data-theme="dark"] {
+    --bg:#000; --panel:#0d0d0f; --panel-2:#16161a; --ink:#ececee; --muted:#8b8b93; --faint:#5a5a61;
+    --rule:#222227; --rule-2:#34343c; --grid:#1b1b1f; --accent:#46b7c4; --good:#37c07d; --fair:#d5a53c; --bad:#e0616b; --shadow:#000;
+  }
+  :root[data-theme="light"] {
+    --bg:#f2f2ef; --panel:#fff; --panel-2:#f8f8f5; --ink:#16181d; --muted:#61656c; --faint:#a1a5ac;
+    --rule:#e3e3df; --rule-2:#cdcdc7; --grid:#ececea; --accent:#17756b; --good:#2f7d4f; --fair:#a9791a; --bad:#a92a35; --shadow:#cfcfca;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-sans); font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased; }
+  .app { max-width:1180px; margin:0 auto; padding:16px 22px 40px; }
+  .masthead { display:flex; align-items:center; gap:14px; padding-bottom:11px; border-bottom:1px solid var(--rule); }
+  .brand { font-family:var(--font-serif); font-size:19px; }
+  .mast-right { margin-left:auto; display:flex; align-items:center; gap:12px; }
+  .state { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); }
+  .state::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--faint); }
+  .state.live::before { background:var(--good); } .state.demo::before { background:var(--accent); } .state.off::before { background:var(--bad); }
+  .battery { display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:12px; color:var(--muted); }
+  .iconbtn { cursor:pointer; background:none; border:1px solid var(--rule-2); color:var(--muted); height:26px; padding:0 9px; font-size:12px; border-radius:4px; }
+  .iconbtn:hover { color:var(--ink); border-color:var(--muted); }
+
+  .toolbar { display:flex; align-items:center; gap:14px; padding:10px 0 8px; flex-wrap:wrap; }
+  .recbtn { font-family:var(--font-sans); font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--rule-2); background:var(--panel); color:var(--ink); padding:7px 15px; border-radius:5px; display:inline-flex; align-items:center; gap:8px; }
+  .recbtn:disabled { opacity:.45; cursor:default; }
+  .recbtn .rdot { width:9px; height:9px; border-radius:50%; background:var(--bad); }
+  .recbtn.recording { border-color:var(--bad); color:var(--bad); } .recbtn.recording .rdot { border-radius:1px; animation:softpulse 1.6s ease-in-out infinite; }
+  .recinfo { color:var(--muted); font-size:12.5px; font-variant-numeric:tabular-nums; }
+  .spacer { flex:1; }
+  .winsel { display:inline-flex; align-items:center; gap:8px; }
+  .winsel .winlbl { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--faint); }
+  .winsel button { cursor:pointer; background:var(--panel); border:1px solid var(--rule-2); color:var(--muted); font-family:var(--font-mono); font-size:12px; padding:5px 10px; }
+  .winsel button:first-of-type { border-radius:5px 0 0 5px; } .winsel button:not(:first-of-type) { border-left:0; } .winsel button:last-of-type { border-radius:0 5px 5px 0; }
+  .winsel button.on { color:var(--bg); background:var(--accent); border-color:var(--accent); }
+
+  .strip { display:flex; gap:24px; flex-wrap:wrap; padding:9px 14px; border:1px solid var(--rule); border-radius:8px; margin-bottom:14px; }
+  .stat { display:flex; flex-direction:column; } .stat .k { font-size:9.5px; text-transform:uppercase; letter-spacing:1px; color:var(--faint); }
+  .stat .v { font-family:var(--font-mono); font-size:15px; } .stat .v .u { color:var(--faint); font-size:11px; margin-left:2px; }
+
+  .card { background:var(--panel); border:1px solid var(--rule); border-radius:10px; padding:15px; }
+  .lbl { font-size:10.5px; text-transform:uppercase; letter-spacing:1.4px; color:var(--muted); margin:0 0 12px; display:flex; justify-content:space-between; align-items:baseline; }
+  .lbl .n { font-family:var(--font-mono); color:var(--faint); font-size:10px; letter-spacing:.5px; }
+  .readout { display:flex; align-items:center; gap:12px; padding:11px 14px; border-radius:9px; border:1px solid var(--rule); border-left:3px solid var(--rule-2); background:var(--panel); margin-bottom:14px; }
+  .readout.ready { border-left-color:var(--good); } .readout.warn { border-left-color:var(--fair); }
+  .readout .mark { font-family:var(--font-mono); font-weight:700; } .readout.ready .mark { color:var(--good); } .readout.warn .mark { color:var(--fair); }
+  .readout .msg { font-weight:500; } .readout .sub { color:var(--muted); font-size:12.5px; }
+
+  .contact { display:grid; grid-template-columns:372px 1fr; gap:16px; }
+  @media (max-width:840px) { .contact { grid-template-columns:1fr; } }
+  .headcard { display:flex; flex-direction:column; align-items:center; }
+  svg .skull { fill:var(--panel-2); stroke:var(--rule-2); stroke-width:1.5; }
+  svg .cap { font-family:var(--font-sans); font-size:10px; fill:var(--faint); text-transform:uppercase; letter-spacing:1.3px; }
+  svg .ref { fill:var(--panel); stroke:var(--rule-2); stroke-width:1; }
+  svg .reflbl { font-family:var(--font-mono); fill:var(--faint); font-size:8.5px; }
+  svg .fpz { fill:var(--panel); stroke:var(--accent); stroke-width:2; }
+  svg .fpzlbl { font-family:var(--font-mono); fill:var(--accent); font-size:9px; font-weight:700; }
+  svg .node { stroke-width:2; transition:fill .4s, stroke .4s; }
+  svg .node.pulse { animation:softpulse 2.4s ease-in-out infinite; }
+  svg .nlabel { font-family:var(--font-mono); fill:var(--bg); font-size:10.5px; font-weight:700; }
+  .maplegend { display:flex; gap:15px; margin-top:8px; font-size:11.5px; color:var(--muted); flex-wrap:wrap; justify-content:center; }
+  .maplegend span { display:inline-flex; align-items:center; gap:6px; } .maplegend i { width:10px; height:10px; border-radius:2px; display:inline-block; }
+  .maplegend i.ref { border:1px solid var(--rule-2); background:var(--panel); } .maplegend i.fpz { border:2px solid var(--accent); background:var(--panel); border-radius:50%; }
+  .edetails { display:flex; flex-direction:column; gap:9px; }
+  .edet { display:grid; grid-template-columns:14px 48px 1fr auto; gap:11px; align-items:center; border:1px solid var(--rule); border-radius:9px; padding:11px 13px; background:var(--panel); }
+  .edet .dot { width:13px; height:13px; border-radius:3px; background:var(--faint); } .edet .dot.pulse { animation:softpulse 2.4s ease-in-out infinite; }
+  .edet .en { font-weight:700; } .edet .eloc { color:var(--muted); font-size:12.5px; }
+  .edet .emetrics { text-align:right; font-family:var(--font-mono); font-size:12.5px; white-space:nowrap; } .edet .es { font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; }
+
+  .waves { margin-top:16px; }
+  .wave { border:1px solid var(--rule); border-radius:9px; background:var(--panel); padding:8px 12px; margin-bottom:10px; }
+  .wave .whead { display:flex; align-items:center; gap:9px; margin-bottom:2px; }
+  .wave .wname { font-weight:700; font-size:14px; } .wave .wstat { font-family:var(--font-mono); font-size:11px; } .wave .wamp { margin-left:auto; font-family:var(--font-mono); font-size:11px; color:var(--muted); }
+  .wave canvas { width:100%; height:82px; display:block; }
+  .waxis { text-align:center; font-size:11px; color:var(--faint); }
+
+  .bandsrow { margin-top:16px; }
+  .bandgrid { display:flex; align-items:flex-end; gap:16px; height:170px; padding-top:6px; border-bottom:1px solid var(--rule-2); }
+  .bcol { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; gap:8px; }
+  .bcol .fill { width:100%; max-width:50px; min-height:2px; border-radius:5px 5px 2px 2px; background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 42%,var(--bg))); transition:height .3s; }
+  .bcol .pv { font-family:var(--font-mono); font-size:13px; }
+  .bxlabels { display:flex; gap:16px; margin-top:8px; } .bxlabels>div { flex:1; text-align:center; font-size:12px; color:var(--muted); }
+  .bxlabels .hz { display:block; font-family:var(--font-mono); font-size:10px; color:var(--faint); }
+  .hint { color:var(--faint); font-size:11.5px; margin-top:12px; line-height:1.5; }
+
+  footer { margin-top:24px; padding-top:13px; border-top:1px solid var(--rule); font-family:var(--font-serif); font-style:italic; font-size:12.5px; color:var(--muted); line-height:1.6; }
+  footer code { font-family:var(--font-mono); font-style:normal; font-size:11.5px; }
+
+  .gate { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:30; }
+  .gate.hide { display:none; }
+  .gatebox { width:480px; max-width:calc(100vw - 40px); text-align:center; border:1px solid var(--rule-2); background:var(--panel); border-radius:12px; padding:40px; }
+  .gate-brand { font-family:var(--font-serif); font-size:22px; margin-bottom:6px; }
+  .gate-sub { color:var(--muted); font-size:13.5px; margin-bottom:26px; }
+  .btn { cursor:pointer; font-family:var(--font-sans); font-size:14px; font-weight:600; border-radius:6px; padding:11px 22px; border:1px solid var(--accent); }
+  .btn.primary { background:var(--accent); color:var(--bg); } .btn.ghost { background:none; color:var(--ink); border-color:var(--rule-2); margin-left:10px; }
+  .gate-err { color:var(--bad); font-size:12.5px; margin-top:16px; min-height:16px; }
+  .gate-note { color:var(--faint); font-size:11.5px; margin-top:20px; line-height:1.6; text-align:left; }
+  .gate-note b { color:var(--muted); }
+
+  @keyframes softpulse { 0%,100% { opacity:1; } 50% { opacity:.45; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="masthead">
+    <div class="brand">Muse 2 · Web Monitor</div>
+    <div class="mast-right">
+      <span class="battery" id="battery" hidden></span>
+      <span id="state" class="state off">not connected</span>
+      <button id="themebtn" class="iconbtn" title="Toggle day / night">☾</button>
+      <button id="disc" class="iconbtn" hidden>Disconnect</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button id="recbtn" class="recbtn" type="button" disabled><span class="rdot"></span><span class="rlabel">Record</span></button>
+    <span id="recinfo" class="recinfo">Raw EEG → CSV, saved to your Downloads</span>
+    <span class="spacer"></span>
+    <div class="winsel" id="winsel">
+      <span class="winlbl">Window</span>
+      <button data-sec="4">4s</button><button data-sec="8" class="on">8s</button><button data-sec="16">16s</button>
+    </div>
+  </div>
+
+  <div class="strip">
+    <div class="stat"><span class="k">Sample rate</span><span class="v"><span id="s-sfreq">—</span><span class="u">Hz</span></span></div>
+    <div class="stat"><span class="k">Contact</span><span class="v"><span id="s-good">—</span></span></div>
+    <div class="stat"><span class="k">Window</span><span class="v"><span id="s-win">8</span><span class="u">s</span></span></div>
+    <div class="stat"><span class="k">Source</span><span class="v" id="s-src">—</span></div>
+  </div>
+
+  <div id="readout" class="readout"><span class="mark" id="mark">·</span><div><div class="msg" id="msg">Waiting…</div><div class="sub" id="sub"></div></div></div>
+
+  <div class="contact">
+    <div class="card headcard">
+      <div class="lbl" style="width:100%"><span>10–20 montage</span><span class="n">axial · nasion up</span></div>
+      <svg id="headsvg" viewBox="0 0 380 392" width="100%" style="max-width:372px"></svg>
+      <div class="maplegend">
+        <span><i style="background:var(--good)"></i>good</span><span><i style="background:var(--fair)"></i>noisy</span>
+        <span><i style="background:var(--bad)"></i>no contact</span><span><i class="fpz"></i>Fpz ref</span><span><i class="ref"></i>10–20 site</span>
+      </div>
+    </div>
+    <div>
+      <div class="lbl"><span>Electrodes</span><span class="n">contact judged on the last 4 s</span></div>
+      <div class="edetails" id="edetails"></div>
+    </div>
+  </div>
+
+  <div class="waves">
+    <div class="lbl" style="margin-top:6px"><span>Waveforms</span><span class="n">µV vs time · vertical scale auto-ranges</span></div>
+    <div id="waveList"></div>
+    <div class="waxis">time (s) — 0 is now, negative into the past · use the Window control above to change span</div>
+  </div>
+
+  <div class="bandsrow card">
+    <div class="lbl"><span>Relative band power — cortical average</span><span class="n">Welch-style PSD</span></div>
+    <div class="bandgrid" id="bandgrid"></div>
+    <div class="bxlabels" id="bxlabels"></div>
+    <div class="hint">Share of in-band power (1–45 Hz) in each rhythm, averaged across TP9 · AF7 · AF8 · TP10. Relative, so the five add to 100%.</div>
+  </div>
+
+  <footer>
+    Display only — the live traces are a real-time contact check, never a validated measurement. <b>Record</b>
+    saves the raw EEG to a CSV in your Downloads (no stimulus markers). Data stays on your computer; nothing is
+    uploaded. Requires Chrome or Edge (Web Bluetooth); Safari and Firefox are not supported.
+  </footer>
+</div>
+
+<div id="gate" class="gate">
+  <div class="gatebox">
+    <div class="gate-brand">Muse 2 · Web Monitor</div>
+    <div class="gate-sub">A live electrode-fit &amp; signal monitor that runs entirely in your browser.</div>
+    <div>
+      <button id="connect" class="btn primary">Connect Muse</button>
+      <button id="demo" class="btn ghost">Try demo</button>
+    </div>
+    <div id="gate-err" class="gate-err"></div>
+    <div class="gate-note">
+      <b>Before connecting:</b> power on the headband so its light is pulsing, and make sure the Muse is
+      <b>not</b> already paired in your computer's Bluetooth settings (remove it there first).<br>
+      <b>Needs Chrome or Edge</b> — Web Bluetooth doesn't work in Safari or Firefox. If the device doesn't
+      appear, click Connect again or toggle your Bluetooth.
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { MuseClient, zipSamples } from 'https://esm.sh/muse-js@3.3.0';
+
+/* ---------------- signal DSP (validated in Node) ---------------- */
+function fftRadix2(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit;
+    if (i < j) { const tr=re[i];re[i]=re[j];re[j]=tr; const ti=im[i];im[i]=im[j];im[j]=ti; } }
+  for (let len = 2; len <= n; len <<= 1) { const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for (let i=0;i<n;i+=len){ let cr=1,ci=0; for(let k=0;k<(len>>1);k++){ const a=i+k,b=i+k+(len>>1);
+      const tr=re[b]*cr-im[b]*ci, ti=re[b]*ci+im[b]*cr; re[b]=re[a]-tr;im[b]=im[a]-ti;re[a]+=tr;im[a]+=ti;
+      const ncr=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=ncr; } } }
+}
+function powerSpectrum(x, sf) {
+  let N=1; while (N*2<=x.length) N*=2; const seg=x.slice(x.length-N);
+  let m=0; for(const v of seg)m+=v; m/=N; const re=new Float64Array(N), im=new Float64Array(N);
+  for(let i=0;i<N;i++) re[i]=seg[i]-m; fftRadix2(re,im);
+  const P=new Float64Array(N); for(let k=0;k<N;k++) P[k]=re[k]*re[k]+im[k]*im[k]; return {P, df:sf/N, N};
+}
+function bandRms(x, sf, lo=1, hi=40) { const {P,df,N}=powerSpectrum(x,sf); let s=0;
+  for(let k=1;k<(N>>1);k++){ const f=k*df; if(f>=lo&&f<hi) s+=2*P[k]; } return Math.sqrt(s/(N*N)); }
+function lineRatio(x, sf, hz=60) { if(sf<=2*hz) return NaN; const {P,df,N}=powerSpectrum(x,sf);
+  let at=0,atN=0,near=0,nearN=0; for(let k=1;k<(N>>1);k++){ const f=k*df,d=Math.abs(f-hz);
+    if(d<1.5){at+=P[k];atN++;} else if(d>3&&d<12){near+=P[k];nearN++;} } if(!atN||!nearN) return NaN; return (at/atN)/(near/nearN); }
+function bandPowers(x, sf) { const {P,df,N}=powerSpectrum(x,sf);
+  const B={delta:[1,4],theta:[4,8],alpha:[8,13],beta:[13,30],gamma:[30,45]}, abs={};
+  for(const b in B){ const[lo,hi]=B[b]; let s=0; for(let k=1;k<(N>>1);k++){const f=k*df; if(f>=lo&&f<hi) s+=2*P[k];} abs[b]=s; }
+  const tot=Object.values(abs).reduce((a,c)=>a+c,0), out={}; for(const b in B) out[b]=tot>0?abs[b]/tot:null; return out; }
+function statusOf(rms, ratio) { if(!isFinite(rms)||rms<1) return "bad"; if(rms>50) return "fair"; if(isFinite(ratio)&&ratio>10) return "fair"; return "good"; }
+function fitScore(rms, status) { if(status==="good") return 100; if(!isFinite(rms)) return 0;
+  if(rms<1) return Math.round(Math.min(30,rms/1*30)); if(rms>50) return Math.round(Math.max(0,70-(rms-50)/50*70)); return 60; }
+function downsample(x, n) { const out=[]; if(x.length<=n){ for(const v of x) out.push(+v.toFixed(1)); return out; }
+  const bins=Math.floor(n/2), sz=x.length/bins; for(let i=0;i<bins;i++){ let lo=Infinity,hi=-Infinity;
+    for(let j=Math.floor(i*sz);j<Math.floor((i+1)*sz);j++){ if(x[j]<lo)lo=x[j]; if(x[j]>hi)hi=x[j]; } out.push(+lo.toFixed(1),+hi.toFixed(1)); } return out; }
+
+/* ---------------- ring buffer ---------------- */
+const SF = 256, MAXLEN = 16 * SF, CHAN = ["TP9","AF7","AF8","TP10"];
+const buf = { t: [], ch: [[],[],[],[]] };
+let recBuf = null, recStart = 0, recording = false;
+function pushSample(tsMs, data) {
+  buf.t.push(tsMs);
+  for (let i = 0; i < 4; i++) buf.ch[i].push(data[i]);
+  if (buf.t.length > MAXLEN) { buf.t.shift(); for (let i=0;i<4;i++) buf.ch[i].shift(); }
+  if (recording && recBuf) { recBuf.t.push(tsMs); for (let i=0;i<4;i++) recBuf.ch[i].push(data[i]); }
+}
+function windowSamples(sec) {
+  const n = Math.min(buf.t.length, Math.round(sec * SF));
+  return { n, ch: buf.ch.map(c => c.slice(c.length - n)), t: buf.t.slice(buf.t.length - n) };
+}
+function effSfreq() { const t = buf.t; if (t.length < 20) return SF;
+  const span = (t[t.length-1] - t[0]) / 1000; return span > 0 ? (t.length - 1) / span : SF; }
+
+/* ---------------- montage / DOM ---------------- */
+const MONTAGE = [
+  ["Fp1",-0.30,0.92,"ref"],["Fpz",0,1.00,"fpz"],["Fp2",0.30,0.92,"ref"],["AF7",-0.53,0.76,"muse"],["AF8",0.53,0.76,"muse"],
+  ["F7",-0.70,0.52,"ref"],["F3",-0.36,0.55,"ref"],["Fz",0,0.55,"ref"],["F4",0.36,0.55,"ref"],["F8",0.70,0.52,"ref"],
+  ["A1",-1.04,0.02,"ref"],["T3",-0.70,0,"ref"],["C3",-0.36,0,"ref"],["Cz",0,0,"ref"],["C4",0.36,0,"ref"],["T4",0.70,0,"ref"],["A2",1.04,0.02,"ref"],
+  ["TP9",-0.83,-0.28,"muse"],["TP10",0.83,-0.28,"muse"],
+  ["T5",-0.70,-0.52,"ref"],["P3",-0.36,-0.55,"ref"],["Pz",0,-0.55,"ref"],["P4",0.36,-0.55,"ref"],["T6",0.70,-0.52,"ref"],["O1",-0.30,-0.92,"ref"],["O2",0.30,-0.92,"ref"],
+];
+const LOC = { AF7:"left forehead", AF8:"right forehead", TP9:"behind left ear", TP10:"behind right ear" };
+const LABELS = { good:"good", fair:"noisy", bad:"no contact" };
+const SVGNS = "http://www.w3.org/2000/svg";
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let COLORS = {};
+function refreshColors() { COLORS = { good:cssv("--good"), fair:cssv("--fair"), bad:cssv("--bad"), faint:cssv("--faint"), grid:cssv("--grid"), rule:cssv("--rule-2"), accent:cssv("--accent") }; }
+const $ = id => document.getElementById(id);
+const txt = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+
+(function buildHead() {
+  const svg = $("headsvg"), cx=190, cy=202, R=158;
+  const el = (nm, a, t) => { const e=document.createElementNS(SVGNS,nm); for(const k in a) e.setAttribute(k,a[k]); if(t!=null) e.textContent=t; return e; };
+  svg.appendChild(el("ellipse",{cx,cy:cy+150,rx:96,ry:15,fill:"var(--shadow)",opacity:.3}));
+  svg.appendChild(el("polygon",{points:`${cx-12},32 ${cx+12},32 ${cx},12`,class:"skull"}));
+  svg.appendChild(el("path",{d:`M${cx-R-8} ${cy} q-14 -18 2 -34 M${cx+R+8} ${cy} q14 -18 -2 -34`,class:"skull",fill:"none"}));
+  svg.appendChild(el("circle",{cx,cy,r:R,class:"skull"}));
+  svg.appendChild(el("text",{x:cx,y:26,"text-anchor":"middle",class:"cap"},"nasion"));
+  svg.appendChild(el("text",{x:cx,y:cy+R+22,"text-anchor":"middle",class:"cap"},"inion"));
+  for (const [label,nx,ny,kind] of MONTAGE) { const x=cx+nx*R, y=cy-ny*R;
+    if (kind==="muse") { svg.appendChild(el("circle",{id:"site-"+label,class:"node",cx:x,cy:y,r:17,fill:"var(--faint)",stroke:"var(--faint)"})); svg.appendChild(el("text",{x,y:y+4,"text-anchor":"middle",class:"nlabel"},label)); }
+    else if (kind==="fpz") { svg.appendChild(el("circle",{class:"fpz",cx:x,cy:y,r:13})); svg.appendChild(el("text",{x,y:y+3,"text-anchor":"middle",class:"fpzlbl"},"Fpz")); }
+    else { svg.appendChild(el("circle",{class:"ref",cx:x,cy:y,r:10})); svg.appendChild(el("text",{x,y:y+3,"text-anchor":"middle",class:"reflbl"},label)); }
+  }
+})();
+
+const edetEls = {}, waveEls = {}, bandEls = {}, BANDS = [["delta","1–4"],["theta","4–8"],["alpha","8–13"],["beta","13–30"],["gamma","30–45"]];
+for (const n of CHAN) {
+  const d = document.createElement("div"); d.className="edet";
+  d.innerHTML = `<span class="dot"></span><span class="en">${n}</span><span class="eloc">${LOC[n]}</span><span class="emetrics"><span class="uv">—</span> · fit <span class="fit">—</span> · <span class="es">—</span></span>`;
+  $("edetails").appendChild(d);
+  edetEls[n] = { dot:d.querySelector(".dot"), uv:d.querySelector(".uv"), fit:d.querySelector(".fit"), es:d.querySelector(".es") };
+  const w = document.createElement("div"); w.className="wave";
+  w.innerHTML = `<div class="whead"><span class="wname">${n}</span><span class="wstat">—</span><span class="wamp">—</span></div><canvas></canvas>`;
+  $("waveList").appendChild(w);
+  waveEls[n] = { stat:w.querySelector(".wstat"), amp:w.querySelector(".wamp"), canvas:w.querySelector("canvas") };
+}
+for (const [b,hz] of BANDS) {
+  const c = document.createElement("div"); c.className="bcol"; c.innerHTML=`<span class="pv">—</span><div class="fill"></div>`; $("bandgrid").appendChild(c);
+  bandEls[b] = { fill:c.querySelector(".fill"), pv:c.querySelector(".pv") };
+  const x = document.createElement("div"); x.innerHTML=`${b}<span class="hz">${hz} Hz</span>`; $("bxlabels").appendChild(x);
+}
+
+/* ---------------- canvas ---------------- */
+function fitCanvas(cv) { const dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight; if(!w) return null;
+  if(cv.width!==Math.round(w*dpr)){ cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+  const ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h); return {ctx,w,h}; }
+function drawWave(cv, arr, color, windowS) {
+  const c=fitCanvas(cv); if(!c) return; const {ctx,w,h}=c; const padL=42,padB=15,padT=5,plotW=w-padL,plotH=h-padB-padT;
+  ctx.font="10px "+cssv("--font-mono"); ctx.strokeStyle=COLORS.grid; ctx.lineWidth=1; ctx.fillStyle=COLORS.faint;
+  const secs=windowS||8, step=secs<=4?1:secs<=8?2:4; ctx.textAlign="center";
+  for(let s=0;s<=secs+0.001;s+=step){ const x=padL+(1-s/secs)*plotW; ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+plotH); ctx.stroke(); ctx.fillText(s===0?"0":"-"+s,x,h-3); }
+  if(!arr||arr.length<2) return; let lo=Infinity,hi=-Infinity; for(const v of arr){ if(v<lo)lo=v; if(v>hi)hi=v; }
+  const amp=Math.max(Math.abs(lo),Math.abs(hi),1); ctx.textAlign="right";
+  for(const [frac,val] of [[0,amp],[0.5,0],[1,-amp]]){ const y=padT+frac*plotH;
+    if(val===0){ ctx.strokeStyle=COLORS.rule; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w,y); ctx.stroke(); ctx.strokeStyle=COLORS.grid; }
+    ctx.fillText(Math.round(val)+(frac===0?" µV":""),padL-4,y+3); }
+  ctx.beginPath(); for(let i=0;i<arr.length;i++){ const x=padL+(i/(arr.length-1))*plotW, y=padT+(1-(arr[i]+amp)/(2*amp))*plotH; i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.strokeStyle=color; ctx.lineWidth=1.1; ctx.stroke(); return amp;
+}
+
+/* ---------------- render loop ---------------- */
+let source = null, battery = null, displayWindow = 8;
+function statusColor(s) { return COLORS[s==="good"?"good":s==="bad"?"bad":"fair"]; }
+function setNode(name, status) { const el=$("site-"+name); if(!el) return; const col=COLORS[status]||COLORS.faint;
+  el.setAttribute("fill",col); el.setAttribute("stroke",col); el.classList.toggle("pulse",status==="bad"); }
+function renderBattery() { const el=$("battery"); if(battery==null){ el.hidden=true; return; } el.hidden=false;
+  const pct=Math.round(battery), fw=Math.max(1,Math.round(pct/100*14));
+  el.innerHTML=`<svg width="24" height="12"><rect x="0.5" y="0.5" width="19" height="11" rx="2" fill="none" stroke="currentColor"/><rect x="20" y="3.5" width="2.5" height="5" fill="currentColor"/><rect x="2" y="2" width="${fw}" height="8" fill="currentColor"/></svg><span>${pct}%</span>`; }
+
+function tick() {
+  if (!source || buf.t.length < SF) return;
+  const sf = effSfreq();
+  const disp = windowSamples(displayWindow);
+  const an = windowSamples(4);
+  let nGood = 0;
+  for (let i = 0; i < 4; i++) {
+    const name = CHAN[i], ax = an.ch[i];
+    const rms = bandRms(ax, sf), ratio = lineRatio(ax, sf), status = statusOf(rms, ratio);
+    if (status === "good") nGood++;
+    setNode(name, status);
+    const e = edetEls[name], col = statusColor(status);
+    e.dot.style.background = col; e.dot.classList.toggle("pulse", status === "bad");
+    e.uv.textContent = isFinite(rms) ? rms.toFixed(1) + " µV" : "—";
+    e.fit.textContent = fitScore(rms, status) + "%";
+    e.es.textContent = LABELS[status]; e.es.style.color = col;
+    const wl = waveEls[name];
+    wl.stat.textContent = LABELS[status]; wl.stat.style.color = col;
+    const amp = drawWave(wl.canvas, downsample(disp.ch[i], 400), col, displayWindow);
+    wl.amp.textContent = amp ? "±" + Math.round(amp) + " µV" : "—";
+  }
+  // bands: average PSD across channels
+  const bpAvg = { delta:0, theta:0, alpha:0, beta:0, gamma:0 };
+  for (let i = 0; i < 4; i++) { const bp = bandPowers(an.ch[i], sf); for (const b in bpAvg) bpAvg[b] += (bp[b] || 0) / 4; }
+  let bmax = 1e-6; for (const b in bpAvg) if (bpAvg[b] > bmax) bmax = bpAvg[b];
+  for (const [b] of BANDS) { bandEls[b].fill.style.height = Math.max(2, bpAvg[b]/bmax*100) + "%"; bandEls[b].pv.textContent = Math.round(bpAvg[b]*100) + "%"; }
+  // strip + readiness
+  txt("s-sfreq", sf.toFixed(1)); txt("s-good", nGood + "/4"); txt("s-win", displayWindow);
+  const ro = $("readout"), badNames = CHAN.filter((n,i) => { const r=bandRms(an.ch[i],sf); return statusOf(r, lineRatio(an.ch[i],sf)) !== "good"; });
+  if (nGood === 4) { ro.className = "readout ready"; txt("mark","✓"); txt("msg","All electrodes within contact tolerance — good to go."); txt("sub","Press Record to capture raw EEG to CSV."); }
+  else { ro.className = "readout warn"; txt("mark","!"); txt("msg",`${nGood} of 4 electrodes good — attend to ${badNames.join(", ")}.`); txt("sub","Reseat the electrode, part hair beneath it, moisten the contact if dry."); }
+  renderBattery();
+}
+setInterval(tick, 150);
+
+/* ---------------- theme / window / record ---------------- */
+function setTheme(t) { document.documentElement.setAttribute("data-theme", t); localStorage.setItem("muse-theme", t); $("themebtn").textContent = t==="dark"?"☾":"☀"; refreshColors(); }
+setTheme(localStorage.getItem("muse-theme") || "dark");
+$("themebtn").addEventListener("click", () => setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark"));
+$("winsel").addEventListener("click", e => { const b=e.target.closest("button"); if(!b) return; displayWindow=+b.dataset.sec;
+  $("winsel").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); localStorage.setItem("muse-window",displayWindow); });
+{ const w=+localStorage.getItem("muse-window"); if(w){ displayWindow=w; $("winsel").querySelectorAll("button").forEach(x=>x.classList.toggle("on",+x.dataset.sec===w)); txt("s-win",w); } }
+
+$("recbtn").addEventListener("click", () => {
+  if (!recording) { recBuf = { t:[], ch:[[],[],[],[]] }; recStart = Date.now(); recording = true;
+    $("recbtn").classList.add("recording"); $("recbtn").querySelector(".rlabel").textContent = "Stop"; recTimer(); }
+  else { recording = false; $("recbtn").classList.remove("recording"); $("recbtn").querySelector(".rlabel").textContent = "Record"; saveCsv(); }
+});
+function recTimer() { if (!recording) return;
+  const secs = ((Date.now()-recStart)/1000).toFixed(1), n = recBuf.t.length;
+  $("recinfo").textContent = `Recording — ${secs}s · ${n.toLocaleString()} samples`;
+  setTimeout(recTimer, 200);
+}
+function saveCsv() {
+  if (!recBuf || !recBuf.t.length) { $("recinfo").textContent = "Nothing recorded."; return; }
+  const t0 = recBuf.t[0]; let csv = "timestamp," + CHAN.join(",") + "\n";
+  for (let i = 0; i < recBuf.t.length; i++)
+    csv += ((recBuf.t[i]-t0)/1000).toFixed(6) + "," + recBuf.ch.map(c => c[i].toFixed(3)).join(",") + "\n";
+  const stamp = new Date().toISOString().replace(/[:T]/g,"-").slice(0,19);
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"}));
+  a.download = `muse_raw_${stamp}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  $("recinfo").textContent = `Saved ${recBuf.t.length.toLocaleString()} samples → ${a.download}`;
+}
+
+/* ---------------- sources: real Muse + demo ---------------- */
+function goLive(kind) {
+  $("gate").classList.add("hide");
+  $("state").className = "state " + (kind === "demo" ? "demo" : "live");
+  txt("state", kind === "demo" ? "demo data" : "streaming");
+  txt("s-src", kind === "demo" ? "demo" : "Muse 2");
+  $("recbtn").disabled = false; $("disc").hidden = false;
+}
+$("connect").addEventListener("click", async () => {
+  txt("gate-err", ""); $("connect").disabled = true;
+  try {
+    const client = new MuseClient();
+    await client.connect();
+    await client.start();
+    source = client;
+    client.telemetryData.subscribe(t => { battery = t.batteryLevel; });
+    zipSamples(client.eegReadings).subscribe(s => { if (s && s.data) pushSample(s.timestamp, s.data); });
+    client.connectionStatus.subscribe(ok => { if (!ok && source) { $("state").className = "state off"; txt("state","disconnected"); } });
+    goLive("muse");
+  } catch (err) {
+    txt("gate-err", "Couldn't connect: " + (err && err.message ? err.message : err) + " — power-cycle the Muse and try again.");
+    $("connect").disabled = false;
+  }
+});
+$("disc").addEventListener("click", () => { try { source && source.disconnect && source.disconnect(); } catch(_){} location.reload(); });
+
+/* demo: realistic-looking EEG; TP10 left flat to show a red electrode */
+$("demo").addEventListener("click", () => {
+  source = "demo";
+  let phase = 0; const randn = () => { let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+  setInterval(() => {
+    const now = Date.now(), batch = 13;
+    for (let k = 0; k < batch; k++) {
+      const tt = phase / SF; phase++;
+      const good = [0,1,2].map(ci => 8*(0.55*Math.sin(2*Math.PI*10*tt + ci) + 0.3*Math.sin(2*Math.PI*6*tt) + 0.35*randn()));
+      pushSample(now - (batch-k)/SF*1000, [good[2], good[0], good[1], 0.03*randn()]);
+    }
+    battery = 78;
+  }, 50);
+  goLive("demo");
+});
+refreshColors();
+</script>
+</body>
+</html>
