@@ -117,6 +117,37 @@
   .gate-note { color:var(--faint); font-size:11.5px; margin-top:20px; line-height:1.6; text-align:left; }
   .gate-note b { color:var(--muted); }
 
+  /* tabs */
+  .tabs { display:flex; gap:2px; margin:12px 0 6px; border-bottom:1px solid var(--rule); }
+  .tab { cursor:pointer; background:none; border:0; border-bottom:2px solid transparent; color:var(--muted); font-family:var(--font-sans); font-size:13px; font-weight:500; padding:9px 16px; margin-bottom:-1px; }
+  .tab:hover { color:var(--ink); } .tab.active { color:var(--ink); border-bottom-color:var(--accent); }
+  .pane[hidden] { display:none; }
+  /* experiment designer */
+  .exp { display:flex; flex-direction:column; gap:16px; }
+  .exprow { display:grid; grid-template-columns:130px 1fr; gap:12px; align-items:center; margin-bottom:11px; }
+  .exprow label { color:var(--muted); font-size:13px; }
+  .exp input[type=number], .exp input[type=text], .exp select, .exp input[type=file] { background:var(--panel-2); border:1px solid var(--rule-2); color:var(--ink); border-radius:5px; padding:7px 10px; font-family:var(--font-mono); font-size:13px; }
+  .exp input[type=text] { font-family:var(--font-sans); width:100%; max-width:260px; }
+  .exp input[type=file] { font-family:var(--font-sans); }
+  .btn.small { padding:8px 15px; font-size:13px; }
+  .timeline { position:relative; height:44px; border:1px solid var(--rule-2); border-radius:6px; background:var(--panel-2); overflow:hidden; }
+  .timeline .blk { position:absolute; top:4px; bottom:4px; background:var(--accent); border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--bg); font-size:11px; font-family:var(--font-mono); overflow:hidden; padding:0 4px; white-space:nowrap; }
+  .ticks { display:flex; justify-content:space-between; margin-top:4px; color:var(--faint); font-size:10px; font-family:var(--font-mono); }
+  .stimlist { display:flex; flex-direction:column; gap:8px; }
+  .stimitem { display:grid; grid-template-columns:1fr auto auto; gap:12px; align-items:center; border:1px solid var(--rule); border-radius:8px; padding:9px 12px; font-size:13px; }
+  .stimitem .meta { font-family:var(--font-mono); color:var(--muted); font-size:12px; }
+  .stimitem .rm { cursor:pointer; color:var(--bad); background:none; border:0; font-size:17px; line-height:1; }
+  .empty { color:var(--faint); font-size:12.5px; text-align:center; padding:16px; }
+  .runwarn { color:var(--fair); font-size:12.5px; margin-left:12px; }
+  .markbtn { cursor:pointer; border:1px solid var(--rule-2); background:var(--panel); color:var(--ink); border-radius:5px; padding:7px 12px; font-size:12.5px; }
+  .markbtn:hover { border-color:var(--accent); color:var(--accent); }
+  /* fullscreen presentation stage */
+  .stage { position:fixed; inset:0; background:#000; color:#fff; display:none; align-items:center; justify-content:center; z-index:50; text-align:center; }
+  .stage.show { display:flex; }
+  .stage img { max-width:82vw; max-height:82vh; }
+  .stage .fix { font-size:74px; } .stage .stxt { font-size:46px; max-width:80vw; }
+  .stage .msg { font-size:26px; } .stage .sub2 { color:#9a9a9a; font-size:15px; margin-top:14px; }
+
   @keyframes softpulse { 0%,100% { opacity:1; } 50% { opacity:.45; } }
 </style>
 </head>
@@ -132,9 +163,16 @@
     </div>
   </div>
 
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="monitor">Live Monitor</button>
+    <button class="tab" data-tab="designer">Experiment Designer</button>
+  </nav>
+
+  <div class="pane" data-pane="monitor">
   <div class="toolbar">
     <button id="recbtn" class="recbtn" type="button" disabled><span class="rdot"></span><span class="rlabel">Record</span></button>
     <span id="recinfo" class="recinfo">Raw EEG → CSV, saved to your Downloads</span>
+    <button id="markbtn" class="markbtn" type="button" hidden>+ Mark event</button>
     <span class="spacer"></span>
     <div class="winsel" id="winsel">
       <span class="winlbl">Window</span>
@@ -188,6 +226,39 @@
     </div>
     <div class="hint">Hold still while recording — head motion adds artifacts. At rest the accelerometer vector sums to ≈1 g (gravity) and the gyroscope reads ≈0. Traces show movement (gravity removed); the numbers are the live reading.</div>
   </div>
+  </div><!-- /Live Monitor pane -->
+
+  <div class="pane" data-pane="designer" hidden>
+    <div class="exp">
+      <div class="card">
+        <div class="lbl"><span>Experiment settings</span><span class="n">recording length &amp; inter-stimulus screen</span></div>
+        <div class="exprow"><label>Duration</label><div><input id="exp-dur" type="number" min="5" value="60"> <span class="recinfo">seconds</span></div></div>
+        <div class="exprow"><label>Between stimuli</label><select id="exp-between"><option value="fixation">Fixation cross (+)</option><option value="blank">Blank screen</option></select></div>
+      </div>
+      <div class="card">
+        <div class="lbl"><span>Add stimulus</span><span class="n">image or text · set timing</span></div>
+        <div class="exprow"><label>Type</label><select id="stim-type"><option value="image">Image</option><option value="text">Text</option></select></div>
+        <div class="exprow" id="row-file"><label>Image file</label><input id="stim-file" type="file" accept="image/*"></div>
+        <div class="exprow" id="row-text" hidden><label>Text</label><input id="stim-text" type="text" placeholder="e.g. a word to show"></div>
+        <div class="exprow"><label>Label</label><input id="stim-label" type="text" placeholder="e.g. happy_face"></div>
+        <div class="exprow"><label>Onset</label><div><input id="stim-onset" type="number" min="0" value="5"> <span class="recinfo">sec</span></div></div>
+        <div class="exprow"><label>Duration</label><div><input id="stim-sdur" type="number" min="0.1" step="0.1" value="3"> <span class="recinfo">sec</span></div></div>
+        <button id="add-stim" class="btn primary small" type="button">+ Add stimulus</button>
+      </div>
+      <div class="card">
+        <div class="lbl"><span>Timeline</span><span class="n">visual layout of your experiment</span></div>
+        <div class="timeline" id="timeline"></div>
+        <div class="ticks" id="ticks"></div>
+        <div class="stimlist" id="stimlist" style="margin-top:14px"><div class="empty">No stimuli added yet.</div></div>
+      </div>
+      <div class="card">
+        <div class="lbl"><span>Run experiment</span><span class="n">fullscreen presentation</span></div>
+        <div class="hint" style="margin:0 0 12px">Connect the Muse first, then run. The screen goes fullscreen, presents your stimuli on schedule, and records the raw EEG with an event marker written at each stimulus onset. One CSV downloads when it finishes. Press <b>Esc</b> to abort.</div>
+        <button id="run-exp" class="btn primary" type="button" disabled>▶ Run experiment</button>
+        <span id="run-warn" class="runwarn">Connect the Muse (or start Demo) first.</span>
+      </div>
+    </div>
+  </div>
 
   <footer>
     Display only — the live traces are a real-time contact check, never a validated measurement. <b>Record</b>
@@ -213,6 +284,8 @@
     </div>
   </div>
 </div>
+
+<div id="stage" class="stage"><div id="stage-content"></div></div>
 
 <script type="module">
 import { MuseClient, zipSamples } from 'https://esm.sh/muse-js@3.3.0';
@@ -252,13 +325,30 @@ function downsample(x, n) { const out=[]; if(x.length<=n){ for(const v of x) out
 /* ---------------- ring buffer ---------------- */
 const SF = 256, MAXLEN = 16 * SF, CHAN = ["TP9","AF7","AF8","TP10"];
 const buf = { t: [], ch: [[],[],[],[]] };
-let recBuf = null, recStart = 0, recording = false;
+let recBuf = null, recStart = 0, recording = false, recMarkers = [];
+let expBuf = null, expEvents = [], expRecording = false;
 function pushSample(tsMs, data) {
   buf.t.push(tsMs);
   for (let i = 0; i < 4; i++) buf.ch[i].push(data[i]);
   if (buf.t.length > MAXLEN) { buf.t.shift(); for (let i=0;i<4;i++) buf.ch[i].shift(); }
   if (recording && recBuf) { recBuf.t.push(tsMs); for (let i=0;i<4;i++) recBuf.ch[i].push(data[i]); }
+  if (expRecording && expBuf) { expBuf.t.push(tsMs); for (let i=0;i<4;i++) expBuf.ch[i].push(data[i]); }
 }
+/* CSV with an optional event column (label written on the sample nearest each marker) */
+function buildCsv(rb, events) {
+  const t0 = rb.t[0], labelAt = {};
+  for (const ev of (events || [])) {
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < rb.t.length; i++) { const d = Math.abs(rb.t[i] - ev.t); if (d < bd) { bd = d; best = i; } }
+    labelAt[best] = labelAt[best] ? labelAt[best] + "|" + ev.label : ev.label;
+  }
+  let csv = "timestamp," + CHAN.join(",") + ",event\n";
+  for (let i = 0; i < rb.t.length; i++)
+    csv += ((rb.t[i] - t0) / 1000).toFixed(6) + "," + rb.ch.map(c => c[i].toFixed(3)).join(",") + "," + (labelAt[i] || "") + "\n";
+  return csv;
+}
+function nowStamp() { return new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19); }
+function downloadCsv(csv, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
 function windowSamples(sec) {
   const n = Math.min(buf.t.length, Math.round(sec * SF));
   return { n, ch: buf.ch.map(c => c.slice(c.length - n)), t: buf.t.slice(buf.t.length - n) };
@@ -424,24 +514,24 @@ $("winsel").addEventListener("click", e => { const b=e.target.closest("button");
 { const w=+localStorage.getItem("muse-window"); if(w){ displayWindow=w; $("winsel").querySelectorAll("button").forEach(x=>x.classList.toggle("on",+x.dataset.sec===w)); txt("s-win",w); } }
 
 $("recbtn").addEventListener("click", () => {
-  if (!recording) { recBuf = { t:[], ch:[[],[],[],[]] }; recStart = Date.now(); recording = true;
-    $("recbtn").classList.add("recording"); $("recbtn").querySelector(".rlabel").textContent = "Stop"; recTimer(); }
-  else { recording = false; $("recbtn").classList.remove("recording"); $("recbtn").querySelector(".rlabel").textContent = "Record"; saveCsv(); }
+  if (!recording) { recBuf = { t:[], ch:[[],[],[],[]] }; recMarkers = []; recStart = Date.now(); recording = true;
+    $("recbtn").classList.add("recording"); $("recbtn").querySelector(".rlabel").textContent = "Stop"; $("markbtn").hidden = false; recTimer(); }
+  else { recording = false; $("recbtn").classList.remove("recording"); $("recbtn").querySelector(".rlabel").textContent = "Record"; $("markbtn").hidden = true; saveCsv(); }
+});
+$("markbtn").addEventListener("click", () => {
+  if (!recording || !recBuf.t.length) return;
+  recMarkers.push({ t: recBuf.t[recBuf.t.length - 1], label: "event " + (recMarkers.length + 1) });
 });
 function recTimer() { if (!recording) return;
-  const secs = ((Date.now()-recStart)/1000).toFixed(1), n = recBuf.t.length;
-  $("recinfo").textContent = `Recording — ${secs}s · ${n.toLocaleString()} samples`;
+  const secs = ((Date.now()-recStart)/1000).toFixed(1);
+  $("recinfo").textContent = `Recording — ${secs}s · ${recBuf.t.length.toLocaleString()} samples · ${recMarkers.length} marks`;
   setTimeout(recTimer, 200);
 }
 function saveCsv() {
   if (!recBuf || !recBuf.t.length) { $("recinfo").textContent = "Nothing recorded."; return; }
-  const t0 = recBuf.t[0]; let csv = "timestamp," + CHAN.join(",") + "\n";
-  for (let i = 0; i < recBuf.t.length; i++)
-    csv += ((recBuf.t[i]-t0)/1000).toFixed(6) + "," + recBuf.ch.map(c => c[i].toFixed(3)).join(",") + "\n";
-  const stamp = new Date().toISOString().replace(/[:T]/g,"-").slice(0,19);
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"}));
-  a.download = `muse_raw_${stamp}.csv`; a.click(); URL.revokeObjectURL(a.href);
-  $("recinfo").textContent = `Saved ${recBuf.t.length.toLocaleString()} samples → ${a.download}`;
+  const name = `muse_raw_${nowStamp()}.csv`;
+  downloadCsv(buildCsv(recBuf, recMarkers), name);
+  $("recinfo").textContent = `Saved ${recBuf.t.length.toLocaleString()} samples${recMarkers.length ? " + " + recMarkers.length + " marks" : ""} → ${name}`;
 }
 
 /* ---------------- sources: real Muse + demo ---------------- */
@@ -451,6 +541,7 @@ function goLive(kind) {
   txt("state", kind === "demo" ? "demo data" : "streaming");
   txt("s-src", kind === "demo" ? "demo" : "Muse 2");
   $("recbtn").disabled = false; $("disc").hidden = false;
+  updateRunBtn();
 }
 $("connect").addEventListener("click", async () => {
   txt("gate-err", ""); $("connect").disabled = true;
@@ -488,6 +579,105 @@ $("demo").addEventListener("click", () => {
   }, 50);
   goLive("demo");
 });
+
+/* ---------------- experiment designer ---------------- */
+const experiment = { duration: 60, between: "fixation", stimuli: [] };
+document.getElementById("tabs").addEventListener("click", e => {
+  const b = e.target.closest(".tab"); if (!b) return;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t === b));
+  document.querySelectorAll(".pane").forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+});
+$("stim-type").addEventListener("change", () => {
+  const img = $("stim-type").value === "image";
+  $("row-file").hidden = !img; $("row-text").hidden = img;
+});
+$("exp-dur").addEventListener("change", () => { experiment.duration = Math.max(5, parseFloat($("exp-dur").value) || 60); renderExp(); });
+$("exp-between").addEventListener("change", () => { experiment.between = $("exp-between").value; });
+$("add-stim").addEventListener("click", () => {
+  const type = $("stim-type").value;
+  const label = $("stim-label").value.trim() || (type + " " + (experiment.stimuli.length + 1));
+  const onset = Math.max(0, parseFloat($("stim-onset").value) || 0);
+  const dur = Math.max(0.1, parseFloat($("stim-sdur").value) || 1);
+  const finish = src => { experiment.stimuli.push({ type, src, label, onset, dur }); experiment.stimuli.sort((a, b) => a.onset - b.onset); $("stim-label").value = ""; renderExp(); };
+  if (type === "image") {
+    const f = $("stim-file").files[0]; if (!f) { alert("Choose an image file first."); return; }
+    const r = new FileReader(); r.onload = () => finish(r.result); r.readAsDataURL(f);
+  } else {
+    const t = $("stim-text").value.trim(); if (!t) { alert("Enter some text first."); return; }
+    finish(t);
+  }
+});
+function renderExp() {
+  const D = experiment.duration, tl = $("timeline"), sl = $("stimlist"), tk = $("ticks");
+  tl.innerHTML = "";
+  for (const s of experiment.stimuli) {
+    const b = document.createElement("div"); b.className = "blk";
+    b.style.left = Math.min(99, s.onset / D * 100) + "%"; b.style.width = Math.max(1.5, s.dur / D * 100) + "%";
+    b.textContent = s.label; tl.appendChild(b);
+  }
+  tk.innerHTML = ""; const steps = 6;
+  for (let i = 0; i <= steps; i++) { const d = document.createElement("span"); d.textContent = Math.round(D * i / steps) + "s"; tk.appendChild(d); }
+  if (!experiment.stimuli.length) sl.innerHTML = '<div class="empty">No stimuli added yet.</div>';
+  else {
+    sl.innerHTML = "";
+    experiment.stimuli.forEach((s, i) => {
+      const row = document.createElement("div"); row.className = "stimitem";
+      row.innerHTML = `<span><b>${escapeHtml(s.label)}</b> <span class="meta">${s.type}</span></span><span class="meta">${s.onset}s → ${(s.onset + s.dur).toFixed(1).replace(/\.0$/,"")}s</span><button class="rm" title="remove">×</button>`;
+      row.querySelector(".rm").addEventListener("click", () => { experiment.stimuli.splice(i, 1); renderExp(); });
+      sl.appendChild(row);
+    });
+  }
+  updateRunBtn();
+}
+function updateRunBtn() {
+  const ready = !!source && experiment.stimuli.length > 0;
+  $("run-exp").disabled = !ready;
+  $("run-warn").textContent = !source ? "Connect the Muse (or start Demo) first." : experiment.stimuli.length ? "" : "Add at least one stimulus.";
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function runExperiment() {
+  if (!source || !experiment.stimuli.length) return;
+  const stage = $("stage"), content = $("stage-content");
+  stage.classList.add("show");
+  try { await stage.requestFullscreen(); } catch (_) {}
+  content.innerHTML = `<div><div class="msg">Get ready…</div><div class="sub2">Press Esc to abort</div></div>`;
+  await wait(1500);
+  expBuf = { t:[], ch:[[],[],[],[]] }; expEvents = []; expRecording = true;
+  const start = performance.now(), D = experiment.duration * 1000;
+  let shown = -2, aborted = false;
+  const onKey = e => { if (e.key === "Escape") aborted = true; };
+  window.addEventListener("keydown", onKey);
+  await new Promise(resolve => {
+    (function frame() {
+      if (aborted || performance.now() - start >= D) return resolve();
+      const sec = (performance.now() - start) / 1000;
+      let active = -1;
+      for (let i = 0; i < experiment.stimuli.length; i++) { const s = experiment.stimuli[i]; if (sec >= s.onset && sec < s.onset + s.dur) { active = i; break; } }
+      if (active !== shown) {
+        shown = active;
+        if (active >= 0) {
+          const s = experiment.stimuli[active];
+          content.innerHTML = s.type === "image" ? `<img src="${s.src}" alt="">` : `<div class="stxt">${escapeHtml(s.src)}</div>`;
+          expEvents.push({ t: expBuf.t.length ? expBuf.t[expBuf.t.length - 1] : Date.now(), label: s.label });
+        } else content.innerHTML = experiment.between === "fixation" ? `<div class="fix">+</div>` : "";
+      }
+      requestAnimationFrame(frame);
+    })();
+  });
+  window.removeEventListener("keydown", onKey);
+  expRecording = false;
+  if (expBuf.t.length) {
+    const name = `experiment_${nowStamp()}.csv`;
+    downloadCsv(buildCsv(expBuf, expEvents), name);
+    content.innerHTML = `<div><div class="msg">${aborted ? "Aborted" : "Complete"}</div><div class="sub2">${expBuf.t.length.toLocaleString()} samples · ${expEvents.length} events → ${name}</div></div>`;
+  } else content.innerHTML = `<div><div class="msg">No data captured</div><div class="sub2">Was the Muse streaming?</div></div>`;
+  await wait(2400);
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {}
+  stage.classList.remove("show");
+}
+$("run-exp").addEventListener("click", runExperiment);
+renderExp();
+
 refreshColors();
 </script>
 </body>
