@@ -92,6 +92,16 @@
   .bxlabels { display:flex; gap:16px; margin-top:8px; } .bxlabels>div { flex:1; text-align:center; font-size:12px; color:var(--muted); }
   .bxlabels .hz { display:block; font-family:var(--font-mono); font-size:10px; color:var(--faint); }
   .hint { color:var(--faint); font-size:11.5px; margin-top:12px; line-height:1.5; }
+  .motion { margin-top:16px; }
+  .mcols { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  @media (max-width:840px) { .mcols { grid-template-columns:1fr; } }
+  .mnone { color:var(--faint); font-size:12.5px; }
+  .axis3 { display:flex; flex-direction:column; gap:10px; }
+  .arow { display:grid; grid-template-columns:22px 76px 1fr; gap:12px; align-items:center; }
+  .arow .ax { font-family:var(--font-mono); font-weight:700; color:var(--muted); }
+  .arow .val { font-family:var(--font-mono); font-size:15px; text-align:right; }
+  .arow .val .u { color:var(--faint); font-size:11px; margin-left:2px; }
+  .arow canvas { width:100%; height:34px; display:block; }
 
   footer { margin-top:24px; padding-top:13px; border-top:1px solid var(--rule); font-family:var(--font-serif); font-style:italic; font-size:12.5px; color:var(--muted); line-height:1.6; }
   footer code { font-family:var(--font-mono); font-style:normal; font-size:11.5px; }
@@ -167,6 +177,16 @@
     <div class="bandgrid" id="bandgrid"></div>
     <div class="bxlabels" id="bxlabels"></div>
     <div class="hint">Share of in-band power (1–45 Hz) in each rhythm, averaged across TP9 · AF7 · AF8 · TP10. Relative, so the five add to 100%.</div>
+  </div>
+
+  <div class="motion card">
+    <div class="lbl"><span>Head motion</span><span class="n">accelerometer + gyroscope · 52 Hz</span></div>
+    <div id="mnone" class="mnone" hidden>Motion data not available on this stream.</div>
+    <div class="mcols" id="mcols">
+      <div><div class="lbl"><span>Accelerometer</span><span class="n">g · ±2</span></div><div class="axis3" id="accel3"></div></div>
+      <div><div class="lbl"><span>Gyroscope</span><span class="n">deg/s · ±245</span></div><div class="axis3" id="gyro3"></div></div>
+    </div>
+    <div class="hint">Hold still while recording — head motion adds artifacts. At rest the accelerometer vector sums to ≈1 g (gravity) and the gyroscope reads ≈0. Traces show movement (gravity removed); the numbers are the live reading.</div>
   </div>
 
   <footer>
@@ -246,6 +266,13 @@ function windowSamples(sec) {
 function effSfreq() { const t = buf.t; if (t.length < 20) return SF;
   const span = (t[t.length-1] - t[0]) / 1000; return span > 0 ? (t.length - 1) / span : SF; }
 
+/* motion (accelerometer g / gyroscope deg/s @ ~52 Hz) */
+const MOT_SF = 52, MOTMAX = 16 * MOT_SF;
+const accel = { x:[], y:[], z:[] }, gyro = { x:[], y:[], z:[] };
+let motionSeen = false;
+function pushAxes(store, s) { for (const a of ["x","y","z"]) { store[a].push(s[a]); if (store[a].length > MOTMAX) store[a].shift(); } }
+function centered(arr, n) { const w = arr.slice(-n); if (!w.length) return w; let m = 0; for (const v of w) m += v; m /= w.length; return w.map(v => v - m); }
+
 /* ---------------- montage / DOM ---------------- */
 const MONTAGE = [
   ["Fp1",-0.30,0.92,"ref"],["Fpz",0,1.00,"fpz"],["Fp2",0.30,0.92,"ref"],["AF7",-0.53,0.76,"muse"],["AF8",0.53,0.76,"muse"],
@@ -295,6 +322,15 @@ for (const [b,hz] of BANDS) {
   bandEls[b] = { fill:c.querySelector(".fill"), pv:c.querySelector(".pv") };
   const x = document.createElement("div"); x.innerHTML=`${b}<span class="hz">${hz} Hz</span>`; $("bxlabels").appendChild(x);
 }
+const axisEls = {};
+for (const [wrapId, key, unit] of [["accel3","accel","g"],["gyro3","gyro","deg/s"]]) {
+  const wrap = $(wrapId); axisEls[key] = {};
+  for (const ax of ["x","y","z"]) {
+    const r = document.createElement("div"); r.className = "arow";
+    r.innerHTML = `<span class="ax">${ax.toUpperCase()}</span><span class="val"><span class="num">—</span><span class="u">${unit}</span></span><canvas></canvas>`;
+    wrap.appendChild(r); axisEls[key][ax] = { num:r.querySelector(".num"), canvas:r.querySelector("canvas") };
+  }
+}
 
 /* ---------------- canvas ---------------- */
 function fitCanvas(cv) { const dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight; if(!w) return null;
@@ -323,6 +359,14 @@ function renderBattery() { const el=$("battery"); if(battery==null){ el.hidden=t
   const pct=Math.round(battery), fw=Math.max(1,Math.round(pct/100*14));
   el.innerHTML=`<svg width="24" height="12"><rect x="0.5" y="0.5" width="19" height="11" rx="2" fill="none" stroke="currentColor"/><rect x="20" y="3.5" width="2.5" height="5" fill="currentColor"/><rect x="2" y="2" width="${fw}" height="8" fill="currentColor"/></svg><span>${pct}%</span>`; }
 
+function drawSigned(cv, arr, color, range) {
+  const c = fitCanvas(cv); if (!c) return; const { ctx, w, h } = c;
+  ctx.strokeStyle = COLORS.rule; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0,h/2); ctx.lineTo(w,h/2); ctx.stroke();
+  if (!arr || arr.length < 2) return;
+  ctx.beginPath();
+  for (let i=0;i<arr.length;i++){ const x=(i/(arr.length-1))*w, y=h/2 - (Math.max(-range,Math.min(range,arr[i]))/range)*(h/2-2); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+}
 function tick() {
   if (!source || buf.t.length < SF) return;
   const sf = effSfreq();
@@ -354,6 +398,19 @@ function tick() {
   const ro = $("readout"), badNames = CHAN.filter((n,i) => { const r=bandRms(an.ch[i],sf); return statusOf(r, lineRatio(an.ch[i],sf)) !== "good"; });
   if (nGood === 4) { ro.className = "readout ready"; txt("mark","✓"); txt("msg","All electrodes within contact tolerance — good to go."); txt("sub","Press Record to capture raw EEG to CSV."); }
   else { ro.className = "readout warn"; txt("mark","!"); txt("msg",`${nGood} of 4 electrodes good — attend to ${badNames.join(", ")}.`); txt("sub","Reseat the electrode, part hair beneath it, moisten the contact if dry."); }
+  // motion
+  $("mnone").hidden = motionSeen;
+  $("mcols").style.display = motionSeen ? "" : "none";
+  if (motionSeen) {
+    const win = Math.round(displayWindow * MOT_SF);
+    for (const ax of ["x","y","z"]) {
+      const av = accel[ax], gv = gyro[ax];
+      axisEls.accel[ax].num.textContent = av.length ? av[av.length-1].toFixed(2) : "—";
+      drawSigned(axisEls.accel[ax].canvas, centered(av, win), COLORS.accent, 0.4);
+      axisEls.gyro[ax].num.textContent = gv.length ? Math.round(gv[gv.length-1]) : "—";
+      drawSigned(axisEls.gyro[ax].canvas, centered(gv, win), COLORS.accent, 80);
+    }
+  }
   renderBattery();
 }
 setInterval(tick, 150);
@@ -404,6 +461,8 @@ $("connect").addEventListener("click", async () => {
     source = client;
     client.telemetryData.subscribe(t => { battery = t.batteryLevel; });
     zipSamples(client.eegReadings).subscribe(s => { if (s && s.data) pushSample(s.timestamp, s.data); });
+    client.accelerometerData.subscribe(a => { if (a && a.samples) { motionSeen = true; for (const s of a.samples) pushAxes(accel, s); } });
+    client.gyroscopeData.subscribe(g => { if (g && g.samples) { motionSeen = true; for (const s of g.samples) pushAxes(gyro, s); } });
     client.connectionStatus.subscribe(ok => { if (!ok && source) { $("state").className = "state off"; txt("state","disconnected"); } });
     goLive("muse");
   } catch (err) {
@@ -424,7 +483,8 @@ $("demo").addEventListener("click", () => {
       const good = [0,1,2].map(ci => 8*(0.55*Math.sin(2*Math.PI*10*tt + ci) + 0.3*Math.sin(2*Math.PI*6*tt) + 0.35*randn()));
       pushSample(now - (batch-k)/SF*1000, [good[2], good[0], good[1], 0.03*randn()]);
     }
-    battery = 78;
+    battery = 78; motionSeen = true;
+    for (let s = 0; s < 3; s++) { pushAxes(accel, { x:0.02*randn(), y:0.02*randn(), z:0.98+0.02*randn() }); pushAxes(gyro, { x:5*randn(), y:5*randn(), z:5*randn() }); }
   }, 50);
   goLive("demo");
 });
