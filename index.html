@@ -231,6 +231,33 @@
   <div class="pane" data-pane="designer" hidden>
     <div class="exp">
       <div class="card">
+        <div class="lbl"><span>Experiment type</span><span class="n">choose a paradigm</span></div>
+        <div class="exprow"><label>Mode</label><select id="exp-mode">
+          <option value="erp">ERP trials — randomized faces / houses (P200, N170, LPP)</option>
+          <option value="timeline">Timeline — a few hand-placed stimuli</option>
+        </select></div>
+      </div>
+
+      <div id="mode-erp">
+        <div class="card">
+          <div class="lbl"><span>ERP trial block</span><span class="n">two conditions, randomized</span></div>
+          <div class="exprow"><label>Condition A</label><div><input id="erp-labelA" type="text" value="face" style="max-width:110px"> <input id="erp-filesA" type="file" accept="image/*" multiple></div></div>
+          <div class="exprow"><label>Condition B</label><div><input id="erp-labelB" type="text" value="house" style="max-width:110px"> <input id="erp-filesB" type="file" accept="image/*" multiple></div></div>
+          <div class="exprow"><label>Trials / condition</label><div><input id="erp-trials" type="number" min="10" value="60"> <span class="recinfo">each</span></div></div>
+          <div class="exprow"><label>Stimulus duration</label><div><input id="erp-stimms" type="number" min="100" step="50" value="500"> <span class="recinfo">ms</span></div></div>
+          <div class="exprow"><label>Interval (ISI)</label><div><input id="erp-isimin" type="number" min="400" step="50" value="1000" style="max-width:90px"> – <input id="erp-isimax" type="number" min="400" step="50" value="1500" style="max-width:90px"> <span class="recinfo">ms, jittered</span></div></div>
+          <div class="hint" id="erp-summary">Load images for both conditions to begin.</div>
+        </div>
+        <div class="card">
+          <div class="lbl"><span>Run ERP block</span><span class="n">fullscreen · records EEG + onset markers</span></div>
+          <div class="hint" style="margin:0 0 12px">Shows a fixation cross, then a random image from a random condition — repeated in randomized order. Each stimulus onset is written into the CSV as an event marker (<code>face</code> / <code>house</code>), which the analysis notebook reads directly. Press <b>Esc</b> to abort.</div>
+          <button id="run-erp" class="btn primary" type="button" disabled>▶ Run ERP block</button>
+          <span id="erp-warn" class="runwarn">Connect the Muse and load images first.</span>
+        </div>
+      </div>
+
+      <div id="mode-timeline" hidden>
+      <div class="card">
         <div class="lbl"><span>Experiment settings</span><span class="n">recording length &amp; inter-stimulus screen</span></div>
         <div class="exprow"><label>Duration</label><div><input id="exp-dur" type="number" min="5" value="60"> <span class="recinfo">seconds</span></div></div>
         <div class="exprow"><label>Between stimuli</label><select id="exp-between"><option value="fixation">Fixation cross (+)</option><option value="blank">Blank screen</option></select></div>
@@ -257,6 +284,7 @@
         <button id="run-exp" class="btn primary" type="button" disabled>▶ Run experiment</button>
         <span id="run-warn" class="runwarn">Connect the Muse (or start Demo) first.</span>
       </div>
+      </div><!-- /mode-timeline -->
     </div>
   </div>
 
@@ -542,6 +570,7 @@ function goLive(kind) {
   txt("s-src", kind === "demo" ? "demo" : "Muse 2");
   $("recbtn").disabled = false; $("disc").hidden = false;
   updateRunBtn();
+  updateErp();          // enable the ERP run button too, once a source is live
 }
 $("connect").addEventListener("click", async () => {
   txt("gate-err", ""); $("connect").disabled = true;
@@ -677,6 +706,96 @@ async function runExperiment() {
 }
 $("run-exp").addEventListener("click", runExperiment);
 renderExp();
+
+/* ---------------- ERP trials mode (randomized two-condition block) ---------------- */
+const erpImgs = { A: [], B: [] };
+$("exp-mode").addEventListener("change", () => {
+  const erpMode = $("exp-mode").value === "erp";
+  $("mode-erp").hidden = !erpMode;
+  $("mode-timeline").hidden = erpMode;
+});
+function readImages(input, key) {
+  const files = [...input.files];
+  erpImgs[key] = [];
+  if (!files.length) { updateErp(); return; }
+  let done = 0;
+  files.forEach(f => {
+    const r = new FileReader();
+    r.onload = () => {
+      const im = new Image(); im.src = r.result;      // preload/decode so onset paints fast
+      erpImgs[key].push(r.result);
+      if (++done === files.length) updateErp();
+    };
+    r.readAsDataURL(f);
+  });
+}
+$("erp-filesA").addEventListener("change", e => readImages(e.target, "A"));
+$("erp-filesB").addEventListener("change", e => readImages(e.target, "B"));
+["erp-trials","erp-stimms","erp-isimin","erp-isimax","erp-labelA","erp-labelB"].forEach(
+  id => $(id).addEventListener("input", updateErp));
+
+function updateErp() {
+  const nA = erpImgs.A.length, nB = erpImgs.B.length;
+  const nTr = +$("erp-trials").value || 60, stim = +$("erp-stimms").value || 500;
+  const lo = +$("erp-isimin").value || 1000, hi = Math.max(lo, +$("erp-isimax").value || 1500);
+  const secs = nTr * 2 * (stim + (lo + hi) / 2) / 1000;
+  $("erp-summary").textContent = (nA && nB)
+    ? `${nA} ${$("erp-labelA").value || "A"} image(s) · ${nB} ${$("erp-labelB").value || "B"} image(s) → ${nTr * 2} randomized trials, about ${Math.floor(secs / 60)} min ${Math.round(secs % 60)} s.`
+    : "Load images for both conditions to begin.";
+  const ready = !!source && nA && nB;
+  $("run-erp").disabled = !ready;
+  $("erp-warn").textContent = !source ? "Connect the Muse (or start Demo) first."
+    : (nA && nB) ? "" : "Load images for both conditions.";
+}
+
+async function runErp() {
+  const labA = ($("erp-labelA").value || "A").trim(), labB = ($("erp-labelB").value || "B").trim();
+  const nTr = +$("erp-trials").value || 60, stim = +$("erp-stimms").value || 500;
+  const lo = +$("erp-isimin").value || 1000, hi = Math.max(lo, +$("erp-isimax").value || 1500);
+
+  const trials = [];
+  for (let i = 0; i < nTr; i++) { trials.push({ label: labA, imgs: erpImgs.A }); trials.push({ label: labB, imgs: erpImgs.B }); }
+  for (let i = trials.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [trials[i], trials[j]] = [trials[j], trials[i]]; }
+
+  const stage = $("stage"), content = $("stage-content");
+  stage.classList.add("show");
+  try { await stage.requestFullscreen(); } catch (_) {}
+  content.innerHTML = `<div><div class="msg">Get ready…</div><div class="sub2">${trials.length} trials · keep still · press Esc to abort</div></div>`;
+  await wait(2500);
+
+  expBuf = { t:[], ch:[[],[],[],[]] }; expEvents = []; expRecording = true;
+  let aborted = false, done = 0;
+  const onKey = e => { if (e.key === "Escape") aborted = true; };
+  window.addEventListener("keydown", onKey);
+
+  for (const tr of trials) {
+    if (aborted) break;
+    content.innerHTML = `<div class="fix">+</div>`;                       // fixation
+    await wait(lo + Math.random() * (hi - lo));                           // jittered ISI
+    if (aborted) break;
+    const src = tr.imgs[Math.floor(Math.random() * tr.imgs.length)];
+    content.innerHTML = `<img src="${src}" alt="">`;                      // stimulus
+    await new Promise(r => requestAnimationFrame(() => {                  // log onset at paint
+      expEvents.push({ t: expBuf.t.length ? expBuf.t[expBuf.t.length - 1] : Date.now(), label: tr.label });
+      r();
+    }));
+    await wait(stim);
+    done++;
+  }
+  window.removeEventListener("keydown", onKey);
+  expRecording = false;
+
+  if (expBuf.t.length) {
+    const name = `erp_${labA}_${labB}_${nowStamp()}.csv`;
+    downloadCsv(buildCsv(expBuf, expEvents), name);
+    content.innerHTML = `<div><div class="msg">${aborted ? "Aborted" : "Complete"}</div><div class="sub2">${done} trials · ${expEvents.length} markers · ${expBuf.t.length.toLocaleString()} samples → ${name}</div></div>`;
+  } else content.innerHTML = `<div><div class="msg">No data captured</div><div class="sub2">Was the Muse streaming?</div></div>`;
+  await wait(3000);
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {}
+  stage.classList.remove("show");
+}
+$("run-erp").addEventListener("click", runErp);
+updateErp();
 
 refreshColors();
 </script>
